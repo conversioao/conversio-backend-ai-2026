@@ -208,6 +208,7 @@ app.post('/api/internal/generation-callback', validateInternalSecret, async (req
                     if (status === 'completed' || status === 'failed') {
                         // Handle multiple result fields (imageUrl, videoUrls, result_url)
                         let finalUri = imageUrl ||
+                            (req.body.imageUrls && req.body.imageUrls[0]) ||
                             (req.body.videoUrls && req.body.videoUrls[0]) ||
                             req.body.result_url ||
                             req.body.audio_url;
@@ -270,10 +271,9 @@ app.post('/api/internal/generation-callback', validateInternalSecret, async (req
                         event.pipeline_status = pipeline_status;
                     if (pipeline_progress !== undefined)
                         event.pipeline_progress = pipeline_progress;
-                    if (imageUrl)
-                        event.imageUrl = imageUrl;
-                    if (req.body.result_url)
-                        event.result_url = req.body.result_url;
+                    let resolvedImageUrl = imageUrl || (req.body.imageUrls && req.body.imageUrls[0]) || req.body.result_url;
+                    if (resolvedImageUrl)
+                        event.imageUrl = resolvedImageUrl;
                     if (req.body.title)
                         event.title = req.body.title;
                     if (req.body.copy)

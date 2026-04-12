@@ -10,6 +10,9 @@ export const runMonitorAgent = async () => {
     console.log('[Agente Monitor] Iniciando auditoria de saúde do sistema...');
 
     try {
+        // Heartbeat
+        await query(`UPDATE agents SET last_run = now() WHERE name = 'Agente Monitor'`);
+
         // 1. Coleta e Registo de Métricas Atuais
         const metrics = await collectAllMetrics();
 

@@ -180,6 +180,9 @@ export async function assignNextAction(leadId: number, userId: string, temperatu
 export const runFunnelAgent = async () => {
     console.log('[Agente Funil] A iniciar o loop de varrimento de Leads à procura de ações...');
     try {
+        // Heartbeat
+        await query(`UPDATE agents SET last_run = now() WHERE name = 'Agente Funil'`);
+
         // Encontra leads cuja Next Action deve atuar
         const dueLeads = await query(`
             SELECT id, user_id, temperature 

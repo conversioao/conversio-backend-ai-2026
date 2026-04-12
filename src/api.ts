@@ -556,6 +556,10 @@ app.post('/api/auth/register', async (req, res) => {
         );
         const user = result.rows[0];
 
+        // Ensure user is in Leads and CRM Profiles for autonomous agents
+        await query('INSERT INTO leads (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [user.id]);
+        await query('INSERT INTO crm_profiles (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [user.id]);
+
         // Provision storage folder
         await provisionUserFolder(user.id);
         
@@ -936,25 +940,73 @@ app.post('/api/auth/resend-whatsapp', authenticateJWT, async (req: AuthRequest, 
 });
 
 // Admin CRM Routes
+app.get('/api/admin/crm/unified-leads', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const result = await query(`
+            SELECT 
+                u.id, 
+                u.name, 
+                u.email, 
+                u.whatsapp, 
+                u.whatsapp_verified, 
+                u.credits, 
+                u.created_at, 
+                u.crm_stage_id,
+                u.plan,
+                (SELECT MAX(created_at) FROM crm_interactions WHERE user_id = u.id) as last_interaction
+            FROM users u
+            ORDER BY u.created_at DESC
+        `);
+        res.json({ success: true, leads: result.rows });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+app.get('/api/admin/crm/campaigns', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const result = await query('SELECT * FROM crm_campaigns ORDER BY created_at DESC');
+        res.json({ success: true, campaigns: result.rows });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+app.post('/api/admin/crm/campaigns', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const { name, message_template, target_segment } = req.body;
+        const result = await query(
+            'INSERT INTO crm_campaigns (name, message_template, segmentation_filters, status) VALUES ($1, $2, $3, $4) RETURNING *',
+            [name, message_template, JSON.stringify(target_segment || {}), 'draft']
+        );
+        res.json({ success: true, campaign: result.rows[0] });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+app.get('/api/admin/notifications', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const result = await query('SELECT * FROM admin_notifications ORDER BY created_at DESC LIMIT 50');
+        res.json({ success: true, notifications: result.rows });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+app.get('/api/admin/whatsapp/logs', authenticateJWT, isAdmin, async (req, res) => {
+    try {
+        const result = await query('SELECT * FROM whatsapp_logs ORDER BY created_at DESC LIMIT 100');
+        res.json({ success: true, logs: result.rows });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 app.get('/api/admin/crm/stages', authenticateJWT, isAdmin, async (req, res) => {
     try {
         const result = await query('SELECT * FROM crm_stages ORDER BY order_index ASC');
         res.json({ success: true, stages: result.rows });
-    } catch (error) {
-        res.status(500).json({ success: false });
-    }
-});
-
-app.get('/api/admin/crm/pipeline', authenticateJWT, isAdmin, async (req, res) => {
-    try {
-        const result = await query(`
-            SELECT u.id, u.name, u.email, u.whatsapp, u.whatsapp_verified, u.credits, u.created_at, u.crm_stage_id,
-                   (SELECT MAX(created_at) FROM crm_interactions WHERE user_id = u.id) as last_interaction
-            FROM users u
-            WHERE u.role = 'user'
-            ORDER BY u.created_at DESC
-        `);
-        res.json({ success: true, leads: result.rows });
     } catch (error) {
         res.status(500).json({ success: false });
     }

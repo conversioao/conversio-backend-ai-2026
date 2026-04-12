@@ -1,4 +1,5 @@
 import { query } from '../db.js';
+import { sendWhatsAppMessage } from './whatsappService.js';
 
 /**
  * Agente Orquestrador Central
@@ -9,6 +10,9 @@ export const runOrchestrator = async () => {
     console.log('[ORCHESTRATOR] Iniciando rotina de distribuição de tarefas...');
 
     try {
+        // Heartbeat Orquestrador
+        await query(`UPDATE agents SET last_run = now() WHERE name = 'Orquestrador'`);
+
         // 1. Obter todos os agentes ativos
         const activeAgentsRes = await query(`SELECT name, config FROM agents WHERE status = 'active'`);
         if (activeAgentsRes.rowCount === 0) {
@@ -76,8 +80,27 @@ export const runOrchestrator = async () => {
                 // Exemplo prático de chamada a submotores (dependendo do código existente/futuro)
                 console.log(`[ORCHESTRATOR] A executar [${agent_name}] -> Tipo: ${task_type}`);
                 
-                // TODO: Colar com agentService (ex. gerar envios, correr campanhas, etc)
-                // Usando o payload JSON definido no sistema
+                // --- LÓGICA ESPECÍFICA POR AGENTE ---
+                if (agent_name === 'Agente Envios') {
+                    if (task_type === 'send_message' || task_type === 'send_automation_msg' || task_type === 'send_campaign_msg' || task_type === 'send_recovery_msg') {
+                        const { message, userId } = payload;
+                        
+                        // Obter número de telefone do utilizador
+                        const userRes = await query('SELECT whatsapp FROM users WHERE id = $1', [userId]);
+                        const whatsapp = userRes.rows[0]?.whatsapp;
+
+                        if (whatsapp) {
+                            console.log(`[ORCHESTRATOR] [Agente Envios] Enviando mensagem para ${whatsapp}...`);
+                            const sendResult = await sendWhatsAppMessage(whatsapp, message, task_type);
+                            if (!sendResult.success) {
+                                throw new Error(`Falha no disparo WhatsApp: ${sendResult.error}`);
+                            }
+                        } else {
+                            console.warn(`[ORCHESTRATOR] [Agente Envios] Utilizador ${userId} não tem WhatsApp cadastrado. Pulando task.`);
+                        }
+                    }
+                }
+                // Adicione outros agentes aqui conforme necessário
                 
                 // Conclui Tarefa na Base de Dados
                 await query(`UPDATE agent_tasks SET status = 'done', executed_at = now() WHERE id = $1`, [id]);

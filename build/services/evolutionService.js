@@ -16,23 +16,28 @@ export class EvolutionService {
      */
     static async getInstanceStatus(instanceName = DEFAULT_INSTANCE) {
         try {
-            const response = await axios.get(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
+            // Usa fetchInstances para alinhar a 100% com o painel visual da Evolution API
+            const response = await axios.get(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
                 headers: this.getHeaders()
             });
-            const data = response.data.instance || response.data;
-            const rawState = data.state || data.status || 'close';
+            const instances = response.data;
+            const instanceData = Array.isArray(instances) ? instances.find(i => i.name === instanceName) : instances[instanceName];
+            if (!instanceData) {
+                return { instanceName, state: 'close' };
+            }
+            const rawState = instanceData.connectionStatus || instanceData.status || 'close';
             // Normalização de Estados para o Painel
             let state = 'close';
-            if (['CONNECTED', 'open', 'open_connected', 'CONNECTED_SERVICE'].includes(rawState)) {
+            if (['open', 'CONNECTED', 'open_connected', 'CONNECTED_SERVICE'].includes(rawState)) {
                 state = 'open';
             }
-            else if (['CONNECTING', 'connecting'].includes(rawState)) {
+            else if (['connecting', 'CONNECTING'].includes(rawState)) {
                 state = 'connecting';
             }
             return {
                 instanceName,
                 state,
-                owner: data.owner,
+                owner: instanceData.ownerJid || instanceData.owner,
             };
         }
         catch (error) {
